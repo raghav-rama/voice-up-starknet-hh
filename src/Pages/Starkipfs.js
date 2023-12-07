@@ -5,14 +5,14 @@ import { create } from "ipfs-http-client";
 import { NFTStorage, Blob } from "nft.storage";
 import { Provider, constants, Contract, Account, ec, json } from "starknet";
 import { Buffer } from "buffer";
+import config from "./config";
 
 window.Buffer = Buffer;
-const NFT_STORAGE_TOKEN = "your-api-token";
+const NFT_STORAGE_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjoweDkwOUYwN0M4Yjc2ODBBNDZkN0Q0ZDkwMmUzNjcyRDZmMzc3RTZjNzQiLCJpc3MiOiJuZnQtc3RvcmFnZSIsImlhdCI6MTY5NTU1NDIwNDkyOCwibmFtZSI6Ik9wZW5EYXRhSGFjayJ9.dSwxOQqrrFNGdaoO39NlcIK4G9fSoRKkgaxBrzrA_eg";
 const client = new NFTStorage({ token: NFT_STORAGE_TOKEN });
-const myAddress =
-  "0x014cA059A8C20C9FcDE765765df3fA1844207B3d00E381beDE498EF544Cb019a";
-const pvtKey =
-  "0x0364072c6e86813ea19535ae62923d5554f3c361a77f7c7f7ad9e920d9e89320";
+const myAddress = config.WALLET_PUBLIC_KEY;
+const pvtKey = config.WALLET_PRIVATE_KEY;
 const IPFSUploader = () => {
   const [ipfs, setIpfs] = useState(null);
   const [hash, setHash] = useState("");
@@ -20,35 +20,20 @@ const IPFSUploader = () => {
   const [articleContent, setArticleContent] = useState("");
 
   // Function to handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    const someData = new Blob([`${articleContent}`]);
+    const metadata = await client.storeBlob(someData);
     // You can perform any action with the articleContent, e.g., store it, send it to an API, etc.
     console.log("Article content submitted:", articleContent);
-  };
-  const projectId = "2MCR81xh4vPrqI0y4SQtv09NTnb";
-  const projectSecret = "1db9edb0249dd358814ccfd8f9dfc26d";
-  const auth =
-    "Basic " + Buffer.from(projectId + ":" + projectSecret).toString("base64");
-  const client = create({
-    host: "ipfs.infura.io",
-    port: 5001,
-    protocol: "https",
-    apiPath: "/api/v0",
-    headers: {
-      authorization: auth,
-    },
-  });
-
-  async function storeOnStarknet() {
+    console.log(metadata);
+    const hex = await mapToHexValues(metadata);
     const provider = new Provider({
-      rpc: { nodeUrl: "https://free-rpc.nethermind.io/goerli-juno" },
+      rpc: { nodeUrl: config.ALCHEMY_RPC_URL },
     });
     const account0 = new Account(provider, myAddress, pvtKey);
     // Connect the deployed Test contract in Testnet
-    const testAddress =
-      "0xb111e57e58e595bc45efcbd38cb1aaec0b5ac1220df25a1b94e570a05633c2";
-
-    // read abi of Test contract
+    const testAddress = config.CONTRACT_ADDRESS;
     const { abi: testAbi } = await provider.getClassAt(testAddress);
     if (testAbi === undefined) {
       throw new Error("no abi.");
@@ -56,19 +41,22 @@ const IPFSUploader = () => {
     const myTestContract = new Contract(testAbi, testAddress, provider);
     myTestContract.connect(account0);
     // Call the store function of Test contract
-    const myCall = myTestContract.populate("increase", [20]);
-    const tx = await myTestContract.increase(myCall.calldata);
+    const myCall = myTestContract.populate("append_hash", [["df"]]);
+    const tx = await myTestContract.append_hash(myCall.calldata);
     console.log(tx);
-  }
-  async function onChange(e) {
-    const file = e.target.files[0];
-    try {
-      const added = await client.add(file);
-      const url = `https://polybase.infura-ipfs.io/ipfs/${added.path}`;
-      setIpfs(url);
-    } catch (error) {
-      console.log("Error uploading file: ", error);
+  };
+  async function mapToHexValues(inputString) {
+    if (typeof inputString !== "string") {
+      return [];
     }
+
+    const hexValuesArray = inputString.split("").map((char) => {
+      const charCode = char.charCodeAt(0);
+      const hexValue = charCode.toString(16).padStart(4, "0");
+      return hexValue;
+    });
+
+    return hexValuesArray;
   }
 
   return (
